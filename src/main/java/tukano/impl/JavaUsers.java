@@ -138,13 +138,12 @@ public class JavaUsers implements Users {
 
 		if(dbRes.isOK())
 			Executors.defaultThreadFactory().newThread(() -> {
-				//cache.deleteUser(userId);
 				cache.invalidateAllUserInfo(userId);
 			}).start();
 		return dbRes;
 	}
 
-	@Override//TODO compensa cache?
+	@Override
 	public Result<List<User>> searchUsers(String pattern) {
 		Log.info( () -> format("searchUsers : patterns = %s\n", pattern));
 
