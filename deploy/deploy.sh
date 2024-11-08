@@ -50,16 +50,16 @@ export SECRET_FILES="./francecentral.secrets ./canadacentral.secrets"
 regions=($AZURE_REGIONS)
 secret_files=($SECRET_FILES)
 
-export USED_DB_TYPE=POSTGRESQL
+
 export AZURE_RESOURCE_GROUP=rg-Tukano-60045-60174
 export AZURE_RESOURCE_GROUP_LOCATION=${regions[0]}
 export AZURE_APP_NAME_BASE=astukano6004560174
 export AZURE_SERVICE_PLAN_BASE=asptukano6004560174
 export AZURE_REDIS_NAME_BASE=redistukano6004560174
-export AZURE_COSMOSDB_NAME_BASE=cosmostukano6004560174
+export AZURE_COSMOSDB_NAME_BASE=cosmostukano6004560174-l
 export AZURE_COSMOSDB_DATABASE_NAME=db-$AZURE_COSMOSDB_NAME_BASE
 export AZURE_COSMOSDB_POSTGRESQL_NAME_BASE=sqltukano6004560174
-export AZURE_BLOB_STORAGE_ACCOUNT_NAME_BASE=stk60045
+export AZURE_BLOB_STORAGE_ACCOUNT_NAME_BASE=stk600452
 export AZURE_FUNCTIONS_NAME_BASE=funtukano6004560174
 export AZURE_FUNCTIONS_STORAGE_ACCOUNT_NAME=sfuntk6004560174
 export AZURE_TRAFFIC_MANAGER_NAME_BASE=tm
@@ -73,9 +73,10 @@ DEPLOY_REDIS=false
 
 DEPLOY_FUNCTIONS=true
 DEPLOY_APP=true
+export USED_DB_TYPE=COSMOS
 
-DEPLOY_FUNCTIONS_TRAFFIC_MANAGER=true
-DEPLOY_APP_TRAFFIC_MANAGER=true
+DEPLOY_FUNCTIONS_TRAFFIC_MANAGER=false
+DEPLOY_APP_TRAFFIC_MANAGER=false
 
 DO_CERTIFICATE=false
 LOCAL_TOMCAT=false
@@ -173,7 +174,7 @@ deploy_cosmosdb() {
       az cosmosdb create \
       --name $AZURE_COSMOSDB_NAME_BASE \
       --resource-group $AZURE_RESOURCE_GROUP 1> /dev/null \
-      && echo "Created CosmosDB for ${region[0]}"
+      && echo "Created CosmosDB for ${regions[0]}"
     else
       az cosmosdb create \
       --name $AZURE_COSMOSDB_NAME_BASE \
@@ -181,7 +182,7 @@ deploy_cosmosdb() {
       --locations regionName=${regions[0]} failoverPriority=0 isZoneRedundant=False \
       --locations regionName=${regions[1]} failoverPriority=1 isZoneRedundant=True \
       --enable-multiple-write-locations 1> /dev/null \
-      && echo "Created CosmosDB for ${region[0]} and ${region[1]}"
+      && echo "Created CosmosDB for ${regions[0]} and ${regions[1]}"
     fi
     if [ $? -eq 0 ]; then
       break
@@ -224,7 +225,7 @@ deploy_postgresql() {
   --administrator-login-password $AZURE_COSMOSDB_POSTGRESQL_PWD 1> /dev/null \
   && echo "Created Postgres Cluster #1"
 
-  az cosmosdb postgres firewall-rule create -n "rule1" --start-ip-address "0.0.0.0" --end-ip-address "255.255.255.255" --cluster-name $AZURE_COSMOSDB_POSTGRESQL_NAME_BASE${regions[0]} -g $AZURE_RESOURCE_GROUP
+  az cosmosdb postgres firewall-rule create -n "rule1" --start-ip-address "0.0.0.0" --end-ip-address "255.255.255.255" --cluster-name $AZURE_COSMOSDB_POSTGRESQL_NAME_BASE${regions[0]} -g $AZURE_RESOURCE_GROUP 1> /dev/null
 
   if [ ${#regions[@]} -ge 2 ]; then
     az cosmosdb postgres cluster create \
@@ -269,13 +270,14 @@ deploy_redis() {
   INDEX=0
   for region in $AZURE_REGIONS
   do
-      az redis create --name $AZURE_REDIS_NAME_BASE$region --resource-group $AZURE_RESOURCE_GROUP --location "$region" --sku Basic --vm-size c0 1> /dev/null
-      redis=($(az redis show --name $AZURE_REDIS_NAME_BASE$region --resource-group $AZURE_RESOURCE_GROUP --query [hostName,enableNonSslPort,port,sslPort] --output tsv))
-      keys=($(az redis list-keys --name $AZURE_REDIS_NAME_BASE$region --resource-group $AZURE_RESOURCE_GROUP --query [primaryKey,secondaryKey] --output tsv))
-      add_secret REDIS_URL ${redis[0]} "${secret_files[$INDEX]}"
-      add_secret REDIS_KEY ${keys[0]} "${secret_files[$INDEX]}"
+    (
+      az redis create --name $AZURE_REDIS_NAME_BASE$region --resource-group $AZURE_RESOURCE_GROUP --location "$region" --sku Basic --vm-size c0 1> /dev/null &&
+      redis=($(az redis show --name $AZURE_REDIS_NAME_BASE$region --resource-group $AZURE_RESOURCE_GROUP --query [hostName,enableNonSslPort,port,sslPort] --output tsv)) &&
+      keys=($(az redis list-keys --name $AZURE_REDIS_NAME_BASE$region --resource-group $AZURE_RESOURCE_GROUP --query [primaryKey,secondaryKey] --output tsv)) &&
+      add_secret REDIS_URL ${redis[0]} "${secret_files[$INDEX]}" &&
+      add_secret REDIS_KEY ${keys[0]} "${secret_files[$INDEX]}" &&
       add_secret REDIS_PORT ${redis[3]} "${secret_files[$INDEX]}"
-    
+    ) &
     let INDEX=${INDEX}+1
   done
   wait
@@ -290,6 +292,7 @@ deploy_app_1() {
     --is-linux \
     --number-of-workers 1 \
     --location $region \
+    --only-show-errors \
     --sku S1 1> /dev/null &&
     echo "Deployed App Service Plan"
 
@@ -303,20 +306,17 @@ deploy_app_1() {
 }
 
 deploy_app_2() {
-  INDEX=0
   for region in $AZURE_REGIONS
   do 
-    export AZURE_REGION=$region # used in POM
     export AZURE_JAVA_PACKAGING="war"
+    mvn -f ../pom.xml clean compile package
+    export AZURE_REGION=$region # used in POM
     cp $region.secrets $SECRETS_FILE_LOCATION
     if $LOCAL_TOMCAT; then
-      envsubst "$(printf '${%s} ' ${!AZURE*})" < ../pom.xml > ../_pom.xml && \
-      mvn -f ../_pom.xml clean compile package tomcat7:redeploy
+      mvn -f ../pom.xml clean compile package tomcat7:redeploy
     else
-      envsubst "$(printf '${%s} ' ${!AZURE*})" < ../pom.xml > ../_pom.xml && \
-      mvn -f ../_pom.xml clean compile package azure-webapp:deploy
+      az webapp deploy --resource-group $AZURE_RESOURCE_GROUP --name $AZURE_APP_NAME_BASE$region --src-path ../target/tukano-1.war --type war --async false
     fi
-      rm ../_pom.xml
   done
 }
 

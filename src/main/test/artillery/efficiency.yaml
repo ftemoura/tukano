@@ -5,22 +5,28 @@ config:
     expect: { }
     metrics-by-endpoint: { }
   phases:
-    - name: simple_get
-      duration: 1
-      arrivalRate: 1
-  payload:
-    path: ./data/random_users.csv
-    order: random
+  - duration: 20
+    arrivalRate: 10
+    name: Startup phase
+  - duration: 5
+    arrivalRate: 20
+    name: Peak phase
+  - duration: 10
+    arrivalRate: 10
+    name: Slow-down phase
+  
+  #payload:
+  #  path: ./data/random_users.csv
+  #  order: random
     #loadAll: true
-    skipHeader: true
-    delimiter: ","
-    skipEmptyLines: true
-    fields:
-      - "userId"
-      - "pwd"
-      - "email"
-      - "displayName"
-
+  #  skipHeader: true
+  #  delimiter: ","
+  #  skipEmptyLines: true
+  #  fields:
+  #    - "userId"
+  #    - "pwd"
+  #    - "email"
+  #    - "displayName"
 before:
   flow:
     - log: "Post user that will be followed"
@@ -37,7 +43,8 @@ before:
           displayName: "star"
 
 scenarios:
-  - name: TuKanoHome
+  - beforeScenario: generateRandomUser
+    name: TuKanoHome
     flow:
       - log: "creating user {{ userId }}"
       - post:
@@ -94,14 +101,14 @@ scenarios:
            json: '$'
            as: bloCreationResponse
       - log: "Short created successfully. Let's upload it {{ bloCreationResponse.blobUrl }}"
-      - post:
-           url: "{{ bloCreationResponse.blobUrl }}"
-           expect:
-             - statusCode: 204
-           headers:
-             Content-Type: application/octet-stream
-           beforeRequest: 'addMultipartFormData'
-      - log: "Short uploaded successfully."
+      #- post:
+      #     url: "{{ bloCreationResponse.blobUrl }}"
+      #     expect:
+      #       - statusCode: 200
+      #     headers:
+      #       Content-Type: application/octet-stream
+      #     beforeRequest: 'addMultipartFormData'
+      #- log: "Short uploaded successfully."
       - log: "Following user 'star'"
       - post:
           url: /users/login
@@ -110,7 +117,7 @@ scenarios:
           body: "userId={{userId}}&pwd={{pwd}}"
           expect:
             - statusCode: 200
-      - log: "get followers for user star"
+      - log: "post followers for user star"
       - post:
           url: /shorts/{{userId}}/star/followers
           headers:
