@@ -1,12 +1,9 @@
-# Tukano - Azure version 
+# Tukano
 
-> The `k8s`  branch uses a Kubernetes based deployment on AKS, and the `azure` branch leverages multiple Azure services.
+Cloud-native short videos platform proof of concept, deployed in Azure. 
 
-Cloud-native short videos platform proof of concept, created for Cloud Computing course 2024/25 @ NOVA SST.
+Developed as part of the Cloud Computing course 2024/25 @ NOVA SST.
 
-Team:
-- [Francisco Moura](https://github.com/ftemoura)
-- [Guilherme Fernandes](https://github.com/Gui28F)
 ## Deployment Stack
 
 - Webserver 
@@ -22,3 +19,8 @@ Team:
 	- Azure Blob Storage
 - Routing
 	- Azure Traffic Manager is used for routing between the geo-distributed services, ensuring the user connects to the closest region.
+
+## Developers
+
+- [Francisco Moura](https://github.com/ftemoura)
+- [Guilherme Fernandes](https://github.com/Gui28F)
